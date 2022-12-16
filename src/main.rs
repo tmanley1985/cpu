@@ -1,7 +1,9 @@
 struct CPU {
     program_counter: usize, // this could be called position_in_memory
     registers: [u8; 16],
-    memory: [u8; 0x1000] //We're simulating 4,096 bytes of RAM
+    memory: [u8; 0x1000], //We're simulating 4,096 bytes of RAM
+    stack: [u16; 16],
+    stack_pointer: usize
 }
 
 impl CPU {
@@ -34,13 +36,40 @@ impl CPU {
             let y = ((opcode & 0x00F0) >>  4) as u8;
             let d = ((opcode & 0x000F) >>  0) as u8;
 
+            let nnn = opcode & 0x0FFF;
+
             match (c, x, y, d) {
                 // There is no opcode that is all zeros so this is the fixed point of our program!
                 (0,0,0,0) => { return; },
+                (0, 0, 0xE, 0xE) => self.ret(),
+                (0x2, _, _, _) => self.call(nnn),
                 (0x8, _, _, 0x4) => self.add_xy(x, y),
                 _  =>  todo!("opcode {:04x}", opcode),
             }
         }
+    }
+
+    fn call(&mut self, address: u16) {
+        let p = self.stack_pointer;
+        let stack = &mut self.stack;
+
+        if p > stack.len() {
+            panic!("Stack Overflow!");
+        }
+
+        stack[p] = self.program_counter as u16;
+        self.stack_pointer += 1;
+        self.program_counter = address as usize;
+    }
+
+    fn ret(&mut self) {
+        if self.stack_pointer == 0 {
+            panic!("Stack Underflow!");
+        }
+
+        self.stack_pointer -= 1;
+        let address = self.stack[self.stack_pointer];
+        self.program_counter = address as usize;
     }
 
     fn add_xy(&mut self, x: u8, y: u8) {
@@ -74,7 +103,9 @@ fn main() {
     let mut cpu = CPU {
         program_counter: 0,
         registers: [0; 16],
-        memory: [0; 4096]
+        memory: [0; 4096],
+        stack: [0; 16],
+        stack_pointer: 0,
     };
 
     cpu.registers[0] = 5;
@@ -84,17 +115,31 @@ fn main() {
 
     let mem = &mut cpu.memory;
 
-    // Loads opcode 0x8014, which adds register 1 to register 0
-    mem[0] = 0x80; mem[1] = 0x14;
-    // Loads opcode 0x8024, which adds register 2 to register 0
-    mem[2] = 0x80; mem[3] = 0x24;
-    // Loads opcode 0x8034, which adds register 3 to register 0    
-    mem[4] = 0x80; mem[5] = 0x34;
+    // Remember, we only have 8 bits at each point in memory
+    // but since we are using it like we have 16 bits, we need to
+    // break up two bytes and put one at a certain index and the next
+    // at that index plus 1.
+
+    // Sets opcode to 0x2100: CALL the function at 0x100.
+    mem[0x000] = 0x21; mem[0x001] = 0x00;
+    // Sets opcode to 0x2100: CALL the function at 0x100.
+    mem[0x002] = 0x21; mem[0x003] = 0x00;
+    // Sets opcode to 0x0000. HALT. This isn't needed really
+    // because when we create the memory we initialize it with zeros.
+    mem[0x004] = 0x00; mem[0x005] = 0x00;
+
+    // Sets the opcode to 0x8014. ADD the result of register 1 into register 0.
+    mem[0x100] = 0x80; mem[0x101] = 0x14;
+    // // Sets the opcode to 0x8014. ADD the result of register 1 into register 0.
+    mem[0x102] = 0x80; mem[0x103] = 0x14;
+
+    // Sets the opcode to 0xEE. RETURN
+    mem[0x104] = 0x00; mem[0x105] = 0xEE;
 
     cpu.run();
 
-    assert_eq!(cpu.registers[0], 35);
+    assert_eq!(cpu.registers[0], 45);
 
-    println!("5 + 10 + 10 + 10 = {}", cpu.registers[0]);
+    println!("5 + (10 * 2) + (10 * 2) = {}", cpu.registers[0]);
 
 }
