@@ -65,12 +65,16 @@ impl CPU {
             panic!("Stack Overflow!");
         }
 
-        // Wherever we are in the stack, we are going to put the position in memory we are currently at
-        // onto the stack.
+        // We need to keep track of the position in memory that we're currently at
+        // before we push the memory address onto the stack so that when we unwind
+        // we will come back to where we were!
         stack[p] = self.program_counter as u16;
 
         // Since we've added something onto the stack we need to increment our stack pointer.
         self.stack_pointer += 1;
+
+        // Here's the magic, we're going to say to the cpu, 'Hey, this address should be fetched, decoded
+        // and executed next in the loop!'.
         self.program_counter = address as usize;
     }
 
@@ -79,6 +83,11 @@ impl CPU {
             panic!("Stack Underflow!");
         }
 
+        // In order to "return" from the function, we need to unwind the stack!
+        // What this really means is we have to decrement the stack pointer so that
+        // we can get the previous address in memory. Then we'll set the program counter
+        // to that address. Again, the program counter really should be called the "position in memory".
+        // When the cpu loops again, it will grab the opcode from the program counter, decode it and execute.
         self.stack_pointer -= 1;
         let address = self.stack[self.stack_pointer];
         self.program_counter = address as usize;
