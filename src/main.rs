@@ -21,13 +21,18 @@ impl CPU {
 
     }
 
+    fn increment_program_counter(&mut self) {
+        // Remember that we are using u8 for our memory but we are using 16 bit opcodes, so we
+        // need to move places at a time.
+        self.program_counter += 2;
+    }
+
     // This is simulating the Fetch Decode Execute cycle of a CPU of the CHIP-8 architecture.
     fn run(&mut self) {
         loop {
             let opcode = self.read_opcode();
-            // Remember that we are using u8 for our memory but we are using 16 bit opcodes, so we
-            // need to move places at a time.
-            self.program_counter += 2;
+
+            self.increment_program_counter();
 
             // This is applying a mask to the opcode
             // to isolate the number it represents.
@@ -41,6 +46,7 @@ impl CPU {
             match (c, x, y, d) {
                 // There is no opcode that is all zeros so this is the fixed point of our program!
                 (0,0,0,0) => { return; },
+                // This will unwind the stack,
                 (0, 0, 0xE, 0xE) => self.ret(),
                 (0x2, _, _, _) => self.call(nnn),
                 (0x8, _, _, 0x4) => self.add_xy(x, y),
@@ -49,7 +55,9 @@ impl CPU {
         }
     }
 
+    // This will push an address onto the stack. That address will contain an opcode which of course will be matched here.
     fn call(&mut self, address: u16) {
+
         let p = self.stack_pointer;
         let stack = &mut self.stack;
 
@@ -57,7 +65,11 @@ impl CPU {
             panic!("Stack Overflow!");
         }
 
+        // Wherever we are in the stack, we are going to put the position in memory we are currently at
+        // onto the stack.
         stack[p] = self.program_counter as u16;
+
+        // Since we've added something onto the stack we need to increment our stack pointer.
         self.stack_pointer += 1;
         self.program_counter = address as usize;
     }
